@@ -221,10 +221,16 @@ class Tariffs(BaseModel):
     # Optional: time-varying activation fractions (defaults in AncillaryService if constant)
     activation_up: Dict[str, Optional[np.ndarray]] = {}     # α^{k,↑}_t by service
     activation_down: Dict[str, Optional[np.ndarray]] = {}   # α^{k,↓}_t by service
+    
+    class Config:
+        arbitrary_types_allowed = True  # Allow numpy arrays
 
 class Exogenous(BaseModel):
     load_ac: np.ndarray                     # L_t site load (kWh per timestep)
     pv_dc: np.ndarray                       # a_t PV generation (kWh per timestep)
+    
+    class Config:
+        arbitrary_types_allowed = True  # Allow numpy arrays
 
 class Capacity(BaseModel):
     capacity_nominal_kwh: float             # C_nom nameplate capacity
@@ -234,6 +240,9 @@ class Capacity(BaseModel):
     def positive_capacity(cls, v):
         assert v > 0, "Nominal capacity must be positive"
         return v
+    
+    class Config:
+        arbitrary_types_allowed = True  # Allow numpy arrays
 
 class Architecture(BaseModel):
     kind: ArchitectureKind                   # Now includes "hybrid"
@@ -282,6 +291,9 @@ class DataBundle(BaseModel):
     tariffs: Tariffs
     exogenous: Exogenous
     capacity: Capacity
+    
+    class Config:
+        arbitrary_types_allowed = True  # Allow numpy arrays in nested models
 
     @validator("tariffs", "exogenous", pre=True)
     def ensure_numpy_arrays(cls, v):
