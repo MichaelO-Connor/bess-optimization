@@ -1,3 +1,5 @@
+
+
 # BESS Optimization Framework
 
 A comprehensive Mixed Integer Linear Programming (MILP) framework for optimizing Battery Energy Storage System (BESS) dispatch strategies across multiple revenue streams.
@@ -10,6 +12,8 @@ A comprehensive Mixed Integer Linear Programming (MILP) framework for optimizing
 - **CSV Data Input**: Load your own time series data from CSV files
 - **Advanced Modeling**: Battery degradation, reserve deliverability, and tagged energy accounting
 - **Comprehensive Validation**: Built-in data validation and consistency checks
+- **Command-Line Interface**: Easy-to-use CLI for common operations
+- **Professional Package**: Proper Python packaging with testing and documentation
 
 ## Quick Start
 
@@ -20,7 +24,7 @@ A comprehensive Mixed Integer Linear Programming (MILP) framework for optimizing
    - Academic licenses are free
    - Set up your license file
 
-2. **Clone and Install Package**
+2. **Install the Package**
 ```bash
 git clone https://github.com/yourusername/bess-optimization.git
 cd bess-optimization
@@ -37,19 +41,13 @@ export ENTSOE_API_KEY=your-key-here  # Optional, for market data
 
 ```python
 from bess import BESSOptimizer
-from bess.data_sources.csv_loader import CSVDataLoader
 
-# Load your time series data
-data = CSVDataLoader.load_from_file('data/timeseries.csv')
+# Generate template files
+from bess.io import generate_template
+generate_template('my_config.yaml', architecture='ac_coupled')
 
-# Create optimizer
-optimizer = BESSOptimizer.from_csv(
-    data,
-    battery_kwh=1000,  # 1 MWh battery
-    battery_kw=250      # 250 kW power
-)
-
-# Run optimization
+# Load configuration and optimize
+optimizer = BESSOptimizer.from_config('my_config.yaml')
 results = optimizer.optimize()
 
 print(f"Total revenue: €{results.total_revenue:.2f}")
@@ -67,6 +65,7 @@ Your CSV file should have the following columns:
 | wholesale_price | Export/spot price | €/kWh | Yes |
 | pv_kw | Solar generation | kW | No |
 | fcr_price | FCR reserve price | €/MW/h | No |
+| afrr_up_price | aFRR up price | €/MW/h | No |
 | capacity_price | Capacity market price | €/kW | No |
 
 Example CSV:
@@ -78,109 +77,165 @@ timestamp,site_load_kw,retail_price,wholesale_price,pv_kw
 ...
 ```
 
-## Advanced Configuration
+## Command Line Interface
 
-### Using YAML Configuration
+### Generate Templates
 
+```bash
+# Generate both config and CSV templates
+python -m bess.cli generate-template --type both -o my_project/
+
+# Generate only configuration template
+python -m bess.cli generate-template --type config -o templates/
+```
+
+### Run Optimization
+
+```bash
+# Optimize from configuration file
+python -m bess.cli optimize config.yaml --csv data.csv -o results.csv
+
+# With time limit and verbose output
+python -m bess.cli optimize config.yaml --time-limit 300 --verbose
+```
+
+### Validate Data
+
+```bash
+# Validate CSV data
+python -m bess.cli validate data.csv --report validation.txt
+
+# Validate configuration
+python -m bess.cli validate config.yaml --strict
+```
+
+## Architecture Types
+
+### AC-Coupled Systems
 ```yaml
-# config.yaml
-timegrid:
-  start: '2024-01-01T00:00:00'
-  end: '2024-01-08T00:00:00'
-  dt_minutes: 60
-  tz: 'UTC'
-
 architecture:
   kind: 'ac_coupled'
-  ancillary_services:
-    - name: 'fcr'
-      direction: 'both'
-      sustain_duration_hours: 0.25
+  forbid_retail_to_load: true
 
 ratings:
-  p_charge_max_kw: 2500
-  p_discharge_max_kw: 2500
-  p_inv_bess_kw: 2500
+  p_inv_pv_kw: 3000      # PV inverter rating
+  p_inv_bess_kw: 2500    # Battery inverter rating
 
-capacity:
-  capacity_nominal_kwh: 10000
-
-data_source:
-  type: 'csv'
-  csv:
-    filepath: 'data/timeseries.csv'
+efficiencies:
+  eta_pv_ac_from_dc: 0.98
+  eta_bess_dc_from_ac: 0.97
+  eta_bess_ac_from_dc: 0.97
 ```
 
-Load and optimize:
-```python
-from bess import BESSOptimizer
+### DC-Coupled Systems
+```yaml
+architecture:
+  kind: 'dc_coupled'
 
-optimizer = BESSOptimizer.from_config('config.yaml')
-results = optimizer.optimize()
+ratings:
+  p_inv_shared_kw: 3000  # Shared inverter rating
+
+efficiencies:
+  eta_shared_dc_from_ac: 0.97
+  eta_shared_ac_from_dc: 0.97
 ```
 
-### Multiple CSV Files
+### Hybrid Systems
+```yaml
+architecture:
+  kind: 'hybrid'
 
-```python
-from bess.data_sources.csv_loader import CSVDataLoader
+ratings:
+  p_inv_shared_kw: 3000  # Shared inverter rating
+  p_dc_pv_kw: 3500       # Optional PV DC/DC converter
 
-# Load from separate files
-data = CSVDataLoader.load_from_multiple_files({
-    'load': 'data/site_load.csv',
-    'prices': 'data/prices.csv',
-    'pv': 'data/pv_generation.csv',
-    'ancillary': 'data/ancillary_prices.csv'
-})
-
-# Continue with optimization...
+efficiencies:
+  eta_shared_dc_from_ac: 0.97
+  eta_shared_ac_from_dc: 0.97
 ```
 
-## Data Validation
+## Ancillary Services Configuration
 
-### Validate Before Optimization
-
-```python
-from bess.utils.validators import validate_data_bundle, generate_validation_report
-
-# Create your data bundle
-bundle = create_bundle_from_csv(data)
-
-# Validate
-is_valid, errors, warnings = validate_data_bundle(bundle)
-
-if is_valid:
-    print("✓ Data validation passed")
-else:
-    print(f"✗ {len(errors)} errors found")
-    for error in errors:
-        print(f"  - {error}")
-
-# Generate detailed report
-report = generate_validation_report(bundle, 'validation_report.txt')
+```yaml
+architecture:
+  ancillary_services:
+    - name: 'fcr'
+      direction: 'both'            # up, down, or both
+      sustain_duration_hours: 0.25 # 15 minutes for FCR
+      settlement_method: 'availability_only'
+      
+    - name: 'afrr_up'
+      direction: 'up'
+      sustain_duration_hours: 1.0
+      activation_fraction_up: 0.05  # 5% expected activation
+      settlement_method: 'wholesale_settled'
 ```
 
-## Examples
+## Real Market Data with ENTSO-E
 
-### Example 1: Energy Arbitrage Only
-
+### Quick Example
 ```python
-from bess import quick_optimize
+from bess.data_sources.entsoe_to_bess import quick_entsoe_optimization
 
-# Simple arbitrage optimization
-results = quick_optimize(
-    csv_file='data/prices.csv',
-    battery_kwh=1000,
-    battery_kw=250,
-    output_file='results.csv'
+# Requires ENTSOE_API_KEY environment variable
+results = quick_entsoe_optimization(
+    country='germany',
+    days=1,
+    capacity_kwh=1000,
+    power_kw=250
 )
 ```
 
-### Example 2: With Ancillary Services
-
+### Detailed Example
 ```python
-from bess import BESSOptimizer, AncillaryService
+from bess.data_sources.entsoe_to_bess import ENTSOEBESSOptimizer
+from datetime import datetime
+import numpy as np
 
-# Configure services
+# Create site-specific load profile (REQUIRED - not from ENTSO-E!)
+from bess.data_sources.load_profiles import create_commercial_load_profile
+
+start = datetime(2024, 6, 1)
+end = datetime(2024, 6, 2)
+
+site_load = create_commercial_load_profile(
+    start=start,
+    end=end,
+    base_load_kw=100,
+    peak_load_kw=500
+)
+
+optimizer = ENTSOEBESSOptimizer()
+
+results = optimizer.optimize_with_entsoe(
+    country='germany',
+    start=start,
+    end=end,
+    bess_config={
+        'capacity_kwh': 1000,
+        'power_kw': 250,
+        'efficiency': 0.90
+    },
+    load_profile=site_load,  # YOUR site load - required!
+    retail_tariff=0.25       # Your retail tariff
+)
+```
+
+### Supported Countries
+- Germany (`'germany'`): FCR, aFRR
+- Netherlands (`'netherlands'`): FCR, aFRR  
+- France (`'france'`): FCR, aFRR, mFRR
+- Belgium (`'belgium'`): FCR, aFRR
+- Great Britain (`'gb'`): FFR, Dynamic Containment
+
+## Advanced Configuration
+
+### Multiple Revenue Streams
+```python
+from bess import BESSOptimizer
+from bess.schema import AncillaryService
+
+# Define services
 services = [
     AncillaryService(
         name='fcr',
@@ -190,143 +245,201 @@ services = [
     ),
     AncillaryService(
         name='afrr_up',
-        direction='up',
+        direction='up', 
         sustain_duration_hours=1.0,
         activation_fraction_up=0.05,
         settlement_method='wholesale_settled'
     )
 ]
 
-# Optimize with services
-optimizer = BESSOptimizer.from_csv(
-    data,
-    battery_kwh=1000,
-    battery_kw=250,
-    ancillary_services=services
-)
-
-results = optimizer.optimize()
+# Create configuration with services
+# ... (see examples/ for complete code)
 ```
 
-### Example 3: ENTSO-E Market Data (Optional)
-
+### Custom Load Profiles
 ```python
-from bess.data_sources.entsoe_to_bess import ENTSOEBESSOptimizer
-from datetime import datetime
+from bess.data_sources.load_profiles import (
+    create_commercial_load_profile,
+    create_industrial_load_profile,
+    create_residential_load_profile
+)
 
-# Requires ENTSO-E API key
-optimizer = ENTSOEBESSOptimizer()
+# Commercial building
+load = create_commercial_load_profile(
+    start=start,
+    end=end,
+    base_load_kw=50,
+    peak_load_kw=200,
+    business_hours=(7, 19)
+)
 
-# Use real market data
-results = optimizer.optimize_with_entsoe(
-    country='germany',
-    start=datetime(2024, 6, 1),
-    end=datetime(2024, 6, 2),
-    bess_config={
-        'capacity_kwh': 1000,
-        'power_kw': 250,
-        'efficiency': 0.90
-    },
-    load_profile=your_site_load  # Must provide site load!
+# Industrial facility
+load = create_industrial_load_profile(
+    start=start,
+    end=end,
+    base_load_kw=500,
+    production_load_kw=2000,
+    shifts=[(6, 14), (14, 22)]
 )
 ```
 
-## Output and Results
-
-### Access Optimization Results
+## Data Validation
 
 ```python
-# Energy flows (kWh per timestep)
-results.charge_retail      # Retail charging
-results.charge_wholesale   # Wholesale charging
-results.discharge_load     # Serving site load
-results.discharge_wholesale # Export to grid
+from bess.utils.validators import validate_data_bundle, generate_validation_report
 
-# Ancillary services (kW)
-results.reserve_capacity['fcr']    # FCR commitment
-results.reserve_capacity['afrr_up'] # aFRR up commitment
+# Validate configuration
+is_valid, errors, warnings = validate_data_bundle(bundle)
 
-# State of charge (kWh)
-results.soc_total
+if errors:
+    for error in errors:
+        print(f"Error: {error}")
 
-# Financial metrics
-results.total_revenue      # Net revenue (€)
-results.energy_cost        # Energy costs (€)
-results.ancillary_revenue  # AS revenue (€)
+# Generate detailed report
+report = generate_validation_report(bundle, 'validation_report.txt')
 ```
 
-### Save Results
+## Results Analysis
 
 ```python
-# Save to CSV
-optimizer.save_results('results.csv')
-
-# Get KPIs
+# Get key performance indicators
 kpis = optimizer.get_kpis()
+
+print(f"Total revenue: €{kpis['total_revenue']:.2f}")
 print(f"Daily cycles: {kpis['avg_daily_cycles']:.2f}")
 print(f"Utilization: {kpis['utilization']:.1%}")
 
-# Generate plots
-optimizer.plot_dispatch('dispatch.png')
+# Access detailed results
+results.charge_retail      # Retail charging (kWh)
+results.discharge_wholesale # Wholesale export (kWh)
+results.soc_total          # State of charge (kWh)
+results.reserve_capacity   # Ancillary reserves by service (kW)
+
+# Save results
+optimizer.save_results('results.csv', format='csv')
 ```
 
 ## Project Structure
 
 ```
 bess-optimization/
-├── bess/               # Main package
-│   ├── schema.py       # Data models
-│   ├── optimize.py     # High-level optimizer
-│   ├── io.py          # Data I/O
-│   ├── optimization/   # MILP implementation
-│   └── data_sources/   # Data loaders
-├── examples/           # Example scripts
-├── data/              # Data directory
-│   └── templates/     # CSV templates
-├── config/            # Configuration files
-├── tests/             # Unit tests
-└── docs/              # Documentation
+├── bess/                   # Main package
+│   ├── __init__.py         # Package exports
+│   ├── schema.py           # Data models (Pydantic)
+│   ├── optimize.py         # High-level optimizer
+│   ├── io.py              # Data I/O utilities
+│   ├── cli.py             # Command-line interface
+│   │
+│   ├── optimization/       # MILP solver core
+│   │   ├── milp_interface.py    # DataBundle → MILP
+│   │   └── milp_dispatcher.py   # Gurobi MILP solver
+│   │
+│   ├── data_sources/       # Data input modules
+│   │   ├── csv_loader.py        # CSV data loading
+│   │   ├── entsoe_integration.py # ENTSO-E API client
+│   │   ├── entsoe_to_bess.py    # ENTSO-E → BESS integration
+│   │   └── load_profiles.py     # Synthetic load generators
+│   │
+│   └── utils/              # Utilities
+│       └── validators.py        # Data validation
+│
+├── examples/               # Usage examples
+│   ├── basic_optimization.py    # Simple arbitrage
+│   ├── csv_example.py           # CSV workflows
+│   └── entsoe_example.py        # Real market data
+│
+├── config/                 # Configuration templates
+│   ├── base_config.yaml         # Full configuration example
+│   └── examples/
+│       └── ac_coupled.yaml      # AC-coupled example
+│
+├── data/
+│   └── templates/              # CSV templates
+│       └── timeseries_template.csv
+│
+├── tests/                  # Test suite
+└── docs/                   # Documentation
 ```
 
-## Troubleshooting
+## Examples
+
+### Basic Energy Arbitrage
+```python
+# See examples/basic_optimization.py
+python examples/basic_optimization.py
+```
+
+### CSV Data Workflow
+```python
+# See examples/csv_example.py
+python examples/csv_example.py
+```
+
+### Real Market Data
+```python
+# See examples/entsoe_example.py  
+# Requires ENTSO-E API key
+python examples/entsoe_example.py
+```
+
+## Requirements
+
+**Core Dependencies:**
+- Python 3.8+
+- Gurobi 10.0+ (with valid license)
+- NumPy, Pandas, Pydantic, PyYAML
+
+**Optional:**
+- `entsoe-py` (for ENTSO-E market data)
+- `matplotlib` (for plotting)
+
+Install optional dependencies:
+```bash
+pip install -e ".[entsoe,viz]"    # ENTSO-E + visualization
+pip install -e ".[dev]"           # Development tools
+```
+
+## Getting Help
+
+### Documentation
+- **Quick Start**: `docs/quickstart.md`
+- **ENTSO-E Guide**: `docs/entsoe_guide.md`
+- **API Reference**: Generated from docstrings
+
+### Examples
+- `examples/basic_optimization.py` - Start here
+- `examples/csv_example.py` - Working with CSV data
+- `examples/entsoe_example.py` - Real market data
 
 ### Common Issues
 
 1. **"Gurobi not found"**
-   - Install Gurobi and set `GRB_LICENSE_FILE` environment variable
-   - Verify installation: `python -c "import gurobipy"`
+   - Install Gurobi and set `GRB_LICENSE_FILE`
+   - Verify: `python -c "import gurobipy"`
 
-2. **"Invalid CSV format"**
-   - Check column names match expected format
-   - Ensure timestamp column is properly formatted
-   - Verify no missing required columns
+2. **"No module named bess"**
+   - Run `pip install -e .` from the repository root
 
 3. **"Optimization infeasible"**
-   - Check battery capacity vs load requirements
-   - Verify SoC bounds are reasonable
-   - Review ancillary service requirements
+   - Check battery capacity vs. load requirements
+   - Review SoC bounds and ancillary service requirements
+   - Run validation: `python -m bess.cli validate config.yaml`
 
-4. **"Validation errors"**
-   - Run validation report for detailed diagnostics
-   - Check time series lengths are consistent
-   - Verify all prices are non-negative
+4. **"ENTSO-E API errors"**
+   - Verify API key: `echo $ENTSOE_API_KEY`
+   - Check date range (some data has 5-day lag)
 
-## Requirements
+## Contributing
 
-- Python 3.8+
-- Gurobi 10.0+ (with valid license)
-- NumPy, Pandas, PyYAML
-- Optional: matplotlib (for plots), entsoe-py (for market data)
+1. Fork the repository
+2. Create a feature branch
+3. Add tests for new functionality
+4. Run the test suite: `pytest`
+5. Submit a pull request
 
 ## License
 
-MIT License - see LICENSE file for details
-
-## Support
-
-- Documentation: [Read the Docs](https://bess-optimization.readthedocs.io)
-- Issues: [GitHub Issues](https://github.com/yourusername/bess-optimization/issues)
-- Examples: See `examples/` directory
+MIT License - see LICENSE file for details.
 
 ## Citation
 
@@ -334,9 +447,20 @@ If you use this framework in your research, please cite:
 
 ```bibtex
 @software{bess_optimization,
-  title = {BESS Optimization Framework},
-  author = {Your Name},
+  title = {BESS Optimization Framework: Mixed Integer Linear Programming for Battery Energy Storage Systems},
+  author = {BESS Optimization Team},
   year = {2024},
   url = {https://github.com/yourusername/bess-optimization}
 }
 ```
+
+## Support
+
+- **Issues**: [GitHub Issues](https://github.com/yourusername/bess-optimization/issues)
+- **Documentation**: [Read the Docs](https://bess-optimization.readthedocs.io)
+- **Examples**: See `examples/` directory
+- **API Reference**: Generated from docstrings in the code
+
+---
+
+**Note**: This framework is designed for research and commercial applications. The optimization models are based on established mathematical formulations for battery dispatch optimization with multiple revenue streams.
