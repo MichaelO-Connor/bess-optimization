@@ -437,30 +437,6 @@ pip install -e ".[dev]"           # Development tools
 4. Run the test suite: `pytest`
 5. Submit a pull request
 
-## License
-
-MIT License - see LICENSE file for details.
-
-## Citation
-
-If you use this framework in your research, please cite:
-
-```bibtex
-@software{bess_optimization,
-  title = {BESS Optimization Framework: Mixed Integer Linear Programming for Battery Energy Storage Systems},
-  author = {BESS Optimization Team},
-  year = {2024},
-  url = {https://github.com/yourusername/bess-optimization}
-}
-```
-
-## Support
-
-- **Issues**: [GitHub Issues](https://github.com/yourusername/bess-optimization/issues)
-- **Documentation**: [Read the Docs](https://bess-optimization.readthedocs.io)
-- **Examples**: See `examples/` directory
-- **API Reference**: Generated from docstrings in the code
-
 ---
 
 **Note**: This framework is designed for research and commercial applications. The optimization models are based on established mathematical formulations for battery dispatch optimization with multiple revenue streams.
