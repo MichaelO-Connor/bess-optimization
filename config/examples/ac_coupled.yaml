@@ -1,0 +1,47 @@
+# AC-coupled BESS configuration example
+timegrid:
+  start: '2024-01-01T00:00:00'
+  end: '2024-01-02T00:00:00' 
+  dt_minutes: 60
+  tz: 'UTC'
+
+architecture:
+  kind: 'ac_coupled'
+  forbid_retail_to_load: true
+  ancillary_services:
+    - name: 'fcr'
+      direction: 'both'
+      sustain_duration_hours: 0.25
+      settlement_method: 'availability_only'
+
+ratings:
+  p_charge_max_kw: 1000
+  p_discharge_max_kw: 1000
+  p_inv_pv_kw: 500
+  p_inv_bess_kw: 1000
+
+efficiencies:
+  eta_c: 0.95
+  eta_d: 0.95
+  eta_pv_ac_from_dc: 0.98
+  eta_bess_dc_from_ac: 0.96
+  eta_bess_ac_from_dc: 0.96
+
+bounds:
+  soc_min: 0.1
+  soc_max: 0.9
+  soc_initial: 0.5
+  enforce_terminal_equality: true
+
+capacity:
+  capacity_nominal_kwh: 4000
+
+degradation:
+  kind: 'throughput'
+  phi_c_eur_per_kwh: 0.02
+  phi_d_eur_per_kwh: 0.02
+
+data_source:
+  type: 'csv'
+  csv:
+    filepath: 'data/templates/timeseries_template.csv'

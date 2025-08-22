@@ -1,0 +1,64 @@
+# Include documentation
+include README.md
+include LICENSE
+include CHANGELOG.md
+
+# Include requirements files
+include requirements*.txt
+
+# Include configuration files
+include setup.cfg
+include pyproject.toml
+include .env.example
+
+# Include package data
+recursive-include bess *.py
+recursive-include bess *.yaml
+recursive-include bess *.json
+
+# Include data templates
+recursive-include data/templates *.csv
+recursive-include data/templates *.yaml
+
+# Include configuration templates
+recursive-include config *.yaml
+
+# Include examples
+recursive-include examples *.py
+recursive-include examples *.yaml
+recursive-include examples *.md
+
+# Include tests
+recursive-include tests *.py
+recursive-include tests/fixtures *.csv
+recursive-include tests/fixtures *.yaml
+
+# Include documentation
+recursive-include docs *.md
+recursive-include docs *.rst
+recursive-include docs *.txt
+
+# Exclude compiled and temporary files
+global-exclude __pycache__
+global-exclude *.py[co]
+global-exclude .git*
+global-exclude .DS_Store
+global-exclude *.log
+global-exclude *.swp
+global-exclude *~
+
+# Exclude development files
+exclude .gitignore
+exclude .pre-commit-config.yaml
+exclude tox.ini
+exclude Makefile
+
+# Exclude data and results
+recursive-exclude data *.csv
+recursive-exclude data *.parquet
+recursive-exclude results *
+exclude data/sample/*
+exclude data/cache/*
+
+# But keep templates
+recursive-include data/templates *.csv

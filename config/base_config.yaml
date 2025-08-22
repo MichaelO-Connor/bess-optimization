@@ -1,0 +1,190 @@
+# Base configuration for BESS optimization
+# This file contains all configurable parameters with descriptions
+
+# Time grid configuration
+timegrid:
+  start: '2024-01-01T00:00:00'    # ISO format, timezone aware
+  end: '2024-01-08T00:00:00'      # One week optimization
+  dt_minutes: 60                   # Timestep in minutes (15, 30, or 60)
+  tz: 'UTC'                        # Timezone
+
+# System architecture
+architecture:
+  kind: 'ac_coupled'               # Options: ac_coupled, dc_coupled, hybrid
+  forbid_retail_to_load: true      # Prevent retail energy arbitrage through battery
+  
+  # Ancillary services configuration
+  ancillary_services:
+    - name: 'fcr'
+      direction: 'both'            # Options: up, down, both
+      sustain_duration_hours: 0.25 # 15 minutes for FCR
+      settlement_method: 'availability_only'  # No activation payment
+      
+    - name: 'afrr_up'
+      direction: 'up'
+      sustain_duration_hours: 1.0  # 1 hour sustain
+      activation_fraction_up: 0.05 # 5% expected activation
+      settlement_method: 'wholesale_settled'  # Settled at wholesale price
+      
+    - name: 'afrr_down'
+      direction: 'down'
+      sustain_duration_hours: 1.0
+      activation_fraction_down: 0.05
+      settlement_method: 'wholesale_settled'
+  
+  # Grid connection limits (optional)
+  import_limit_kw: 5000            # Maximum grid import
+  export_limit_kw: 5000            # Maximum grid export
+
+# Power ratings
+ratings:
+  p_charge_max_kw: 2500            # Battery max charge power
+  p_discharge_max_kw: 2500         # Battery max discharge power
+  
+  # AC-coupled specific (required for ac_coupled architecture)
+  p_inv_pv_kw: 3000               # PV inverter rating
+  p_inv_bess_kw: 2500             # Battery inverter rating
+  
+  # DC-coupled/hybrid specific (required for dc_coupled or hybrid)
+  # p_inv_shared_kw: 3000         # Shared inverter rating
+  # p_dc_pv_kw: 3500              # PV DC/DC converter (hybrid only)
+
+# Efficiency parameters
+efficiencies:
+  eta_c: 0.95                      # Battery charge efficiency
+  eta_d: 0.95                      # Battery discharge efficiency
+  self_discharge: 0.0001           # Self-discharge rate per timestep
+  
+  # AC-coupled efficiencies
+  eta_pv_ac_from_dc: 0.98         # PV inverter efficiency
+  eta_bess_dc_from_ac: 0.97       # Battery inverter charge efficiency
+  eta_bess_ac_from_dc: 0.97       # Battery inverter discharge efficiency
+  
+  # DC-coupled/hybrid efficiencies
+  # eta_shared_dc_from_ac: 0.97   # Shared inverter AC->DC
+  # eta_shared_ac_from_dc: 0.97   # Shared inverter DC->AC
+
+# Operating bounds
+bounds:
+  soc_min: 0.10                    # Minimum SoC (fraction)
+  soc_max: 0.90                    # Maximum SoC (fraction)
+  soc_initial: 0.50                # Initial SoC (fraction)
+  enforce_terminal_equality: true  # End SoC = Initial SoC
+  cycles_per_day: 2.0              # Maximum daily cycles (optional)
+  
+  # Alternative terminal conditions
+  # soc_terminal_min: 0.40         # Minimum final SoC
+  # soc_terminal_max: 0.60         # Maximum final SoC
+
+# Battery capacity
+capacity:
+  capacity_nominal_kwh: 10000      # 10 MWh battery
+  # usable_capacity_kwh: null      # Time-varying capacity (CSV)
+
+# Degradation model
+degradation:
+  kind: 'throughput'               # Options: throughput, fce
+  phi_c_eur_per_kwh: 0.020        # €20/MWh charge degradation
+  phi_d_eur_per_kwh: 0.020        # €20/MWh discharge degradation
+  
+  # FCE model parameters (if kind: fce)
+  # DoD_ref: 0.8                  # Reference depth of discharge
+  # f_cycle: 0.0001               # Cycle degradation factor
+  # f_calendar: 0.00001           # Calendar aging factor
+  # RC_eur_per_kwh: 150           # Replacement cost €/kWh
+  # SoH_EoL: 0.8                  # End-of-life threshold
+
+# Data source configuration
+data_source:
+  type: 'csv'                      # Options: csv, entsoe, api
+  
+  # CSV data source
+  csv:
+    # Single file with all data
+    filepath: 'data/timeseries.csv'
+    
+    # Or multiple files
+    # files:
+    #   load: 'data/site_load.csv'
+    #   prices: 'data/prices.csv'
+    #   pv: 'data/pv_generation.csv'
+    #   ancillary: 'data/ancillary_prices.csv'
+    
+    # Column mappings (if non-standard names)
+    column_mappings:
+      timestamp: 'datetime'
+      site_load: 'load_kw'
+      retail_price: 'retail_eur_kwh'
+      wholesale_price: 'spot_eur_kwh'
+      pv_generation: 'solar_kw'
+    
+    # Data processing
+    resample_minutes: null         # Resample to different frequency
+    interpolate_missing: true      # Fill missing values
+    
+  # ENTSO-E data source (requires API key)
+  # entsoe:
+  #   bidding_zone: 'DE_LU'
+  #   services: ['fcr', 'afrr_up', 'afrr_down']
+
+# Optimization settings
+optimization:
+  solver: 'gurobi'                 # Options: gurobi, cplex
+  time_limit: 300                  # Maximum solve time (seconds)
+  mip_gap: 0.001                   # MIP optimality gap (0.1%)
+  verbose: false                   # Show solver output
+  
+  # Advanced settings
+  threads: 0                       # 0 = use all available
+  method: -1                       # -1 = automatic
+  presolve: -1                     # -1 = automatic
+  
+# Output configuration
+output:
+  results_dir: 'results'           # Output directory
+  save_format: 'csv'               # Options: csv, parquet, json
+  include_metadata: true           # Save optimization metadata
+  create_plots: true               # Generate dispatch plots
+  
+  # Report generation
+  generate_report: true            # Create HTML/PDF report
+  report_format: 'html'            # Options: html, pdf
+  
+  # Data to export
+  export_variables:
+    - 'charge_*'                   # All charging variables
+    - 'discharge_*'                # All discharge variables
+    - 'soc_total'                  # State of charge
+    - 'reserve_capacity'           # Ancillary reserves
+    - 'grid_to_load'               # Grid imports
+
+# Scenario variations (for sensitivity analysis)
+scenarios:
+  - name: 'base'
+    modifications: {}              # Use base configuration
+    
+  - name: 'high_degradation'
+    modifications:
+      degradation:
+        phi_c_eur_per_kwh: 0.040
+        phi_d_eur_per_kwh: 0.040
+    
+  - name: 'no_ancillary'
+    modifications:
+      architecture:
+        ancillary_services: []
+    
+  - name: 'large_battery'
+    modifications:
+      capacity:
+        capacity_nominal_kwh: 20000
+      ratings:
+        p_charge_max_kw: 5000
+        p_discharge_max_kw: 5000
+
+# Validation settings
+validation:
+  strict: true                     # Fail on validation errors
+  max_price: 10.0                  # Maximum reasonable price €/kWh
+  max_load: 100000                 # Maximum site load kW
+  min_timesteps: 24                # Minimum timesteps required
